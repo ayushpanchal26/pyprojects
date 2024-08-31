@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ravindra Panchal - Language Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: url('background.jpg') no-repeat center center fixed;
+            background-size: cover;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 800px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #d4f1ff;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            resize: none;
+            background-color: #cabee0;
+            color: #000000;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #ffffff;
+            color: rgb(221, 116, 116);
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+
+        button:hover {
+            background-color: #000000;
+        }
+
+        .output {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            background-color: #c8e7ff;
+            color: #000000;
+            margin-top: 10px;
+            resize: none;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+
+            textarea, .output {
+                height: 80px;
+                font-size: 14px;
+            }
+
+            button {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Ravindra Panchal - Language Converter</h1>
+    <input type="file" id="imageUpload" accept="image/*" />
+    <textarea id="inputText" placeholder="Paste text in Arabic, Hindi, or English..."></textarea>
+    <button onclick="convertText()">Convert</button>
+    <textarea id="outputOriginal" class="output" placeholder="Original text will appear here..." readonly></textarea>
+    <textarea id="outputHindi" class="output" placeholder="Hindi translation will appear here..." readonly></textarea>
+    <textarea id="outputEnglish" class="output" placeholder="English translation will appear here..." readonly></textarea>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@2.1.1/dist/tesseract.min.js"></script>
+<script>
+    document.getElementById('imageUpload').addEventListener('change', handleImageUpload);
+
+    async function handleImageUpload(event) {
+        const file = event.target.files[0];
+        if (file) {
+            try {
+                // Extract text from image using Tesseract.js
+                const result = await Tesseract.recognize(file, 'eng+ara+hin', { logger: info => console.log(info) });
+                document.getElementById('inputText').value = result.data.text;
+                convertText(); // Automatically convert after extracting text
+            } catch (error) {
+                console.error("Error during text extraction:", error);
+                alert("Failed to extract text from image.");
+            }
+        }
+    }
+
+    async function convertText() {
+        const inputText = document.getElementById('inputText').value;
+        const outputOriginal = document.getElementById('outputOriginal');
+        const outputHindi = document.getElementById('outputHindi');
+        const outputEnglish = document.getElementById('outputEnglish');
+
+        outputOriginal.value = "Extracting..."; // Indicate processing
+
+        const textSegments = segmentText(inputText, 1000); // Segment the text into chunks (increased chunk size)
+        const translations = {
+            hi: [],
+            en: [],
+            ar: []
+        };
+
+        for (const segment of textSegments) {
+            const sourceLang = detectLanguage(segment);
+            try {
+                const hindiTranslation = await translateText(segment, sourceLang, 'hi');
+                const englishTranslation = await translateText(segment, sourceLang, 'en');
+                const arabicTranslation = await translateText(segment, sourceLang, 'ar');
+
+                translations.hi.push(hindiTranslation);
+                translations.en.push(englishTranslation);
+                translations.ar.push(arabicTranslation);
+            } catch (error) {
+                console.error("Error during translation:", error);
+                translations.hi.push("Translation failed");
+                translations.en.push("Translation failed");
+                translations.ar.push("Translation failed");
+            }
+        }
+
+        outputHindi.value = translations.hi.join(' ');
+        outputEnglish.value = translations.en.join(' ');
+        outputOriginal.value = translations.ar.join(' ');
+    }
+
+    function detectLanguage(text) {
+        const arabicPattern = /[\u0600-\u06FF]/;
+        const hindiPattern = /[\u0900-\u097F]/;
+        const englishPattern = /^[A-Za-z0-9\s]+$/;
+
+        if (arabicPattern.test(text)) return 'ar';
+        if (hindiPattern.test(text)) return 'hi';
+        if (englishPattern.test(text)) return 'en';
+        return 'en'; // Default to English if no match
+    }
+
+    function segmentText(text, chunkSize) {
+        const segments = [];
+        while (text.length > 0) {
+            segments.push(text.substring(0, chunkSize));
+            text = text.substring(chunkSize);
+        }
+        return segments;
+    }
+
+    async function translateText(text, sourceLang, targetLang) {
+        const apiUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
+        try {
+            const response = await fetch(apiUrl);
+            const data = await response.json();
+            return data[0].map(item => item[0]).join('');
+        } catch (error) {
+            console.error("Translation error:", error);
+            return "Translation failed";
+        }
+    }
+</script>
+
+
+
+</body>
+</html>
